@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>캠퍼스나누미 - 대학생 교내 물품 공유 플랫폼</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background-color: #f1f5f9; }
+        .hide { display: none !important; }
+    </style>
+</head>
+<body class="flex justify-center items-center min-h-screen py-4">
+
+    <!-- 모바일 프레임 컨테이너 -->
+    <div id="app-container" class="w-full max-w-md bg-white h-[92vh] max-h-[880px] shadow-2xl rounded-3xl flex flex-col relative overflow-hidden border border-gray-300">
+        
+        <!-- 상단 헤더 -->
+        <header id="header" class="bg-emerald-600 text-white px-4 py-3.5 flex justify-between items-center z-10 shadow-md">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-hands-holding-child text-xl"></i>
+                <span id="header-title" class="font-bold text-lg">캠퍼스나누미</span>
+            </div>
+            <div id="header-right" class="text-xs font-medium bg-emerald-700 px-3 py-1 rounded-full cursor-pointer shadow-inner" onclick="openUnivSelector()">
+                <span id="current-univ-badge">학교 선택</span>
+            </div>
+        </header>
+
+        <!-- 메인 콘텐츠 영역 -->
+        <main id="main-content" class="flex-1 overflow-y-auto pb-20 bg-gray-50">
+            <!-- 동적 렌더링 영역 -->
+        </main>
+
+        <!-- 하단 네비게이션바 -->
+        <nav id="bottom-nav" class="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-2.5 text-gray-400 z-20 shadow-lg">
+            <button onclick="switchTab('home')" class="nav-btn flex flex-col items-center" data-tab="home">
+                <i class="fa-solid fa-house text-lg"></i>
+                <span class="text-[11px] mt-1">홈</span>
+            </button>
+            <button onclick="switchTab('search')" class="nav-btn flex flex-col items-center" data-tab="search">
+                <i class="fa-solid fa-magnifying-glass text-lg"></i>
+                <span class="text-[11px] mt-1">전체검색</span>
+            </button>
+            <button onclick="switchTab('write')" class="nav-btn flex flex-col items-center text-emerald-600" data-tab="write">
+                <i class="fa-solid fa-circle-plus text-2xl text-emerald-600"></i>
+                <span class="text-[11px] mt-1 font-bold">글쓰기</span>
+            </button>
+            <button onclick="switchTab('chat')" class="nav-btn flex flex-col items-center" data-tab="chat">
+                <i class="fa-solid fa-comments text-lg"></i>
+                <span class="text-[11px] mt-1">채팅</span>
+            </button>
+            <button onclick="switchTab('mypage')" class="nav-btn flex flex-col items-center" data-tab="mypage">
+                <i class="fa-solid fa-user text-lg"></i>
+                <span class="text-[11px] mt-1">마이</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- 앱 로직 JavaScript -->
+    <script>
+        // 실제 서울·경기권 4년제, 3년제, 2년제 주요 대학교 데이터베이스
+        const seoulGyeonggiUniversities = [
+            // 서울권 4년제
+            "서울대학교", "연세대학교", "고려대학교", "성균관대학교", "한양대학교", "중앙대학교", "경희대학교", 
+            "한국외국어대학교", "서울시립대학교", "이화여자대학교", "건국대학교", "동국대학교", "홍익대학교", 
+            "국민대학교", "숙명여자대학교", "세종대학교", "숭실대학교", "단국대학교(서울)", "광운대학교", "상명대학교",
+            "서울과학기술대학교", "성신여자대학교", "덕성여자대학교", "서울여자대학교", "동덕여자대학교", "한성대학교", "서경대학교",
+            // 경기권 4년제
+            "가천대학교", "경기대학교", "아주대학교", "인하대학교", "단국대학교(죽전)", "명지대학교(자연)", "강남대학교",
+            "대진대학교", "성결대학교", "수원대학교", "신한대학교", "아주대학교", "안양대학교", "용인대학교", "중부대학교(고양)",
+            "평택대학교", "한경국립대학교", "한국공학대학교", "한세대", "협성대학교",
+            // 서울·경기권 2년제 / 3년제 (전문대)
+            "경기과학기술대학교", "경민대학교", "계원예술대학교", "국제대학교", "김포대학교", "농협대학교", "대림대학교",
+            "동남보건대학교", "동양미래대학교", "두원공과대학교", "부천대학교", "삼육보건대학교", "서울예술대학교", "서정대학교",
+            "수원과학대학교", "수원여자대학교", "신구대학교", "신안산대학교", "안산대학교", "여주대학교", "연성대학교",
+            "오산대학교", "용인예술과학대학교", "유한대학교", "인덕대학교", "인천재능대학교", "주성대학교", "청강문화산업대학교", "한국승강기대학교"
+        ];
+
+        let currentUser = JSON.parse(localStorage.getItem('nanumi_user')) || null;
+        let currentTab = 'home';
+        let currentFilter = 'all'; // all, request, rent, share
+
+        // 초기 테스트 예시 게시글 데이터
+        let posts = JSON.parse(localStorage.getItem('nanumi_posts')) || [
+            {
+                id: 1,
+                university: '가천대학교',
+                category: 'request', 
+                title: '내일 전공 수업 우산 빌려주실 분 있나요?',
+                content: '갑자기 비가 오는데 우산을 안 들고 왔네요ㅜㅜ 비전타워 근처에서 1교시 끝나고 급하게 빌릴 수 있을까요?',
+                place: '비전타워 로비',
+                datetime: '내일 오전 9시',
+                status: '진행중',
+                author: '가천루키',
+                likes: 3,
+                views: 12,
+                createdAt: '2026-09-28 10:30',
+                comments: [
+                    { author: '캠퍼스맨', text: '학생회관 앞에 우산 대여소 있어요!' }
+                ]
+            },
+            {
+                id: 2,
+                university: '경기대학교',
+                category: 'rent',
+                title: '공학용 계산기(FX-570ES) 대여해드립니다.',
+                content: '이번 학기 공학수학 끝내서 계산기 필요 없으신 분 대여해 드립니다. 수원캠퍼스 직거래 가능해요!',
+                place: '종합강의동',
+                datetime: '상시 협의',
+                status: '진행중',
+                author: '경기대지혜인',
+                likes: 7,
+                views: 24,
+                createdAt: '2026-09-28 09:15',
+                comments: []
+            },
+            {
+                id: 3,
+                university: '서울대학교',
+                category: 'share',
+                title: '안 쓰는 1학년 화학 전공 교재 무료 나눔합니다.',
+                content: '새 책처럼 깨끗합니다. 중앙도서관 앞에서 받아가세요!',
+                place: '중앙도서관 앞',
+                datetime: '오늘 오후 4시',
+                status: '진행중',
+                author: '스누너',
+                likes: 5,
+                views: 40,
+                createdAt: '2026-09-27 15:20',
+                comments: []
+            }
+        ];
+
+        let chats = JSON.parse(localStorage.getItem('nanumi_chats')) || [];
+        let linkLogs = JSON.parse(localStorage.getItem('nanumi_link_logs')) || [];
+
+        function saveData() {
+            localStorage.setItem('nanumi_posts', JSON.stringify(posts));
+            localStorage.setItem('nanumi_chats', JSON.stringify(chats));
+            localStorage.setItem('nanumi_user', JSON.stringify(currentUser));
+            localStorage.setItem('nanumi_link_logs', JSON.stringify(linkLogs));
+        }
+
+        // 앱 실행 시 URL 파라미터(링크 공유 기록 추적) 확인
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sharedPostId = urlParams.get('postId');
+            const referrer = urlParams.get('ref');
+
+            if (sharedPostId) {
+                // 링크를 타고 들어온 경우 기록(Log) 남기기
+                const targetPost = posts.find(p => p.id == sharedPostId);
+                if (targetPost) {
+                    targetPost.views = (targetPost.views || 0) + 1;
+                    linkLogs.unshift({
+                        postId: sharedPostId,
+                        postTitle: targetPost.title,
+                        referrer: referrer || '외부 링크(공유 URL)',
+                        time: new Date().toLocaleString()
+                    });
+                    saveData();
+                }
+            }
+
+            if (!currentUser) {
+                renderAuthScreen();
+            } else {
+                if (sharedPostId) {
+                    openDetail(parseInt(sharedPostId));
+                } else {
+                    switchTab('home');
+                }
+            }
+        };
+
+        function renderAuthScreen() {
+            document.getElementById('bottom-nav').classList.add('hide');
+            let univOptions = seoulGyeonggiUniversities.map(u => `<option value="${u}">${u}</option>`).join('');
+            
+            let html = `
+                <div class="p-6 flex flex-col justify-center h-full space-y-6">
+                    <div class="text-center">
+                        <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm">
+                            <i class="fa-solid fa-hands-holding-child text-3xl"></i>
+                        </div>
+                        <h1 class="text-2xl font-bold text-gray-800">캠퍼스나누미</h1>
+                        <p class="text-xs text-gray-500 mt-1">서울·경기권 대학생 교내 물품 공유 플랫폼</p>
+                    </div>
+
+                    <div class="space-y-3 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">닉네임</label>
+                            <input type="text" id="auth-nickname" placeholder="사용할 닉네임을 입력하세요" class="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">소속 대학교 (서울·경기권)</label>
+                            <select id="auth-univ" class="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:border-emerald-500">
+                                ${univOptions}
+                            </select>
+                        </div>
+                        <button onclick="handleRegister()" class="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-md hover:bg-emerald-700 transition mt-2">시작하기</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        function handleRegister() {
+            const nickname = document.getElementById('auth-nickname').value.trim();
+            const university = document.getElementById('auth-univ').value;
+
+            if (!nickname) {
+                alert('사용하실 닉네임을 입력해주세요!');
+                return;
+            }
+
+            currentUser = { nickname, university };
+            saveData();
+            document.getElementById('bottom-nav').classList.remove('hide');
+            switchTab('home');
+        }
+
+        function switchTab(tabName) {
+            if (!currentUser) {
+                renderAuthScreen();
+                return;
+            }
+            currentTab = tabName;
+            document.getElementById('bottom-nav').classList.remove('hide');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if(btn.dataset.tab === tabName) {
+                    btn.classList.add('text-emerald-600', 'font-bold');
+                    btn.classList.remove('text-gray-400');
+                } else {
+                    btn.classList.remove('text-emerald-600', 'font-bold');
+                    btn.classList.add('text-gray-400');
+                }
+            });
+
+            if (tabName === 'home') renderHome();
+            else if (tabName === 'search') renderSearch();
+            else if (tabName === 'write') renderWrite();
+            else if (tabName === 'chat') renderChatList();
+            else if (tabName === 'mypage') renderMyPage();
+        }
+
+        // 1. 홈 화면 (학교별 커뮤니티 게시판)
+        function renderHome() {
+            document.getElementById('header-title').innerText = currentUser.university + " 커뮤니티";
+            document.getElementById('current-univ-badge').innerText = "학교변경";
+
+            const univPosts = posts.filter(p => p.university === currentUser.university);
+            const filteredPosts = currentFilter === 'all' ? univPosts : univPosts.filter(p => p.category === currentFilter);
+
+            let html = `
+                <div class="p-4">
+                    <!-- 필터 탭 -->
+                    <div class="flex space-x-1 bg-gray-200 p-1 rounded-xl text-xs font-medium mb-4 shadow-inner">
+                        <button onclick="setFilter('all')" class="flex-1 py-2 rounded-lg transition ${currentFilter==='all'?'bg-white text-emerald-600 shadow font-bold':'text-gray-600'}">전체</button>
+                        <button onclick="setFilter('request')" class="flex-1 py-2 rounded-lg transition ${currentFilter==='request'?'bg-white text-emerald-600 shadow font-bold':'text-gray-600'}">필요요청</button>
+                        <button onclick="setFilter('rent')" class="flex-1 py-2 rounded-lg transition ${currentFilter==='rent'?'bg-white text-emerald-600 shadow font-bold':'text-gray-600'}">물품대여</button>
+                        <button onclick="setFilter('share')" class="flex-1 py-2 rounded-lg transition ${currentFilter==='share'?'bg-white text-emerald-600 shadow font-bold':'text-gray-600'}">무료나눔</button>
+                    </div>
+
+                    <div class="space-y-3">
+            `;
+
+            if(filteredPosts.length === 0) {
+                html += `
+                    <div class="text-center py-20 text-gray-400">
+                        <i class="fa-solid fa-box-open text-4xl mb-2"></i>
+                        <p class="text-sm">등록된 게시글이 없습니다.</p>
+                        <p class="text-xs mt-1">하단 [글쓰기]를 눌러 첫 물품을 공유해보세요!</p>
+                    </div>
+                `;
+            } else {
+                filteredPosts.forEach(post => {
+                    let badgeClass = 'bg-amber-100 text-amber-800';
+                    let badgeText = '필요요청';
+                    if(post.category === 'rent') { badgeClass = 'bg-blue-100 text-blue-800'; badgeText = '물품대여'; }
+                    if(post.category === 'share') { badgeClass = 'bg-emerald-100 text-emerald-800'; badgeText = '무료나눔'; }
+                    
+                    const statusBadge = post.status === '해결완료' ? '<span class="bg-gray-200 text-gray-600 px-2 py-0.5 rounded text-[10px] font-bold ml-1">해결완료</span>' : '';
+
+                    html += `
+                        <div onclick="openDetail(${post.id})" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:border-emerald-500 transition">
+                            <div class="flex justify-between items-start mb-1.5">
+                                <div class="flex items-center">
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${badgeClass}">${badgeText}</span>
+                                    ${statusBadge}
+                                </div>
+                                <span class="text-[11px] text-gray-400">${post.createdAt.slice(5, 16)}</span>
+                            </div>
+                            <h3 class="font-bold text-gray-800 text-sm mb-1">${post.title}</h3>
+                            <p class="text-gray-600 text-xs line-clamp-2 mb-3 leading-relaxed">${post.content}</p>
+                            <div class="flex justify-between items-center text-[11px] text-gray-500 border-t pt-2.5 border-gray-100">
+                                <span><i class="fa-solid fa-location-dot mr-1 text-emerald-500"></i>${post.place}</span>
+                                <div class="flex space-x-3">
+                                    <span><i class="fa-regular fa-comment mr-1"></i>${post.comments.length}</span>
+                                    <span><i class="fa-regular fa-eye mr-1"></i>${post.views || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `</div></div>`;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            renderHome();
+        }
+
+        function openUnivSelector() {
+            let univOptions = seoulGyeonggiUniversities.map(u => `<option value="${u}" ${u===currentUser.university?'selected':''}>${u}</option>`).join('');
+            let html = `
+                <div class="p-6">
+                    <h2 class="text-lg font-bold text-gray-800 mb-2"><i class="fa-solid fa-school text-emerald-600 mr-2"></i>대학교 변경</h2>
+                    <p class="text-xs text-gray-500 mb-4">서울·경기권 타 대학의 실시간 물품 공유 게시판을 확인하실 수 있습니다.</p>
+                    <select id="change-univ-select" class="w-full p-3 border border-gray-300 rounded-xl mb-4 font-medium text-gray-700 bg-white text-sm">
+                        ${univOptions}
+                    </select>
+                    <button onclick="applyUniversityChange()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-emerald-700 transition text-sm">변경하기</button>
+                    <button onclick="switchTab('home')" class="w-full mt-2 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl text-sm">취소</button>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        function applyUniversityChange() {
+            currentUser.university = document.getElementById('change-univ-select').value;
+            saveData();
+            switchTab('home');
+        }
+
+        // 2. 전체 검색 화면
+        function renderSearch() {
+            document.getElementById('header-title').innerText = "전국 대학 물품 통합검색";
+            let html = `
+                <div class="p-4">
+                    <div class="flex space-x-2 mb-4">
+                        <input type="text" id="search-input" placeholder="필요한 물건 검색 (예: 우산, 계산기, 책)" class="flex-1 p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-white">
+                        <button onclick="executeSearch()" class="bg-emerald-600 text-white px-4 rounded-xl font-bold text-sm shadow"><i class="fa-solid fa-search"></i></button>
+                    </div>
+                    <div id="search-results" class="space-y-3">
+                        <p class="text-center text-gray-400 py-16 text-xs">수도권 대학의 공유 물품을 검색해보세요.</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        function executeSearch() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const results = posts.filter(p => p.title.toLowerCase().includes(query) || p.content.toLowerCase().includes(query) || p.place.toLowerCase().includes(query));
+            
+            let html = `<p class="text-xs text-gray-500 mb-2 font-medium">검색 결과 총 ${results.length}건</p>`;
+            if(results.length === 0) {
+                html += `<div class="text-center py-12 text-gray-400 text-xs">검색 결과가 없습니다.</div>`;
+            } else {
+                results.forEach(post => {
+                    html += `
+                        <div onclick="openDetail(${post.id})" class="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 cursor-pointer">
+                            <div class="flex justify-between items-center text-[11px] text-gray-400 mb-1">
+                                <span class="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">${post.university}</span>
+                                <span>${post.category==='request'?'필요요청':post.category==='rent'?'물품대여':'무료나눔'}</span>
+                            </div>
+                            <h4 class="font-bold text-gray-800 text-sm">${post.title}</h4>
+                            <p class="text-xs text-gray-500 mt-1"><i class="fa-solid fa-location-dot mr-1 text-emerald-500"></i>${post.place}</p>
+                        </div>
+                    `;
+                });
+            }
+            document.getElementById('search-results').innerHTML = html;
+        }
+
+        // 3. 글쓰기 화면
+        function renderWrite() {
+            document.getElementById('header-title').innerText = "물품 공유 글쓰기";
+            let html = `
+                <div class="p-4 space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">게시글 유형</label>
+                        <select id="write-category" class="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white font-medium">
+                            <option value="request">물품 요청 (필요한 물건 구하기)</option>
+                            <option value="rent">물품 대여 (빌려주기)</option>
+                            <option value="share">무료 나눔 (기부 및 무상 양도)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">제목</label>
+                        <input type="text" id="write-title" placeholder="예: 공학용 계산기 빌려드립니다." class="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">상세 내용 및 설명</label>
+                        <textarea id="write-content" rows="4" placeholder="물품 상태, 오염 여부, 대여 조건 등을 자세히 적어주세요." class="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">교내 만날 장소</label>
+                            <input type="text" id="write-place" placeholder="예: 도서관 로비" class="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">날짜 및 시간</label>
+                            <input type="text" id="write-datetime" placeholder="예: 내일 오후 2시" class="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white">
+                        </div>
+                    </div>
+                    <button onclick="submitPost()" class="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-md hover:bg-emerald-700 transition text-sm">게시글 등록하기</button>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        function submitPost() {
+            const category = document.getElementById('write-category').value;
+            const title = document.getElementById('write-title').value.trim();
+            const content = document.getElementById('write-content').value.trim();
+            const place = document.getElementById('write-place').value.trim();
+            const datetime = document.getElementById('write-datetime').value.trim();
+
+            if(!title || !content || !place) {
+                alert('제목, 상세 내용, 만날 장소를 모두 입력해주세요!');
+                return;
+            }
+
+            const newPost = {
+                id: Date.now(),
+                university: currentUser.university,
+                category,
+                title,
+                content,
+                place,
+                datetime: datetime || '상시 협의',
+                status: '진행중',
+                author: currentUser.nickname,
+                likes: 0,
+                views: 0,
+                createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+                comments: []
+            };
+
+            posts.unshift(newPost);
+            saveData();
+            alert('게시글이 성공적으로 등록되었습니다!');
+            switchTab('home');
+        }
+
+        // 4. 상세 화면 및 링크 공유 (트래킹 기능 포함)
+        function openDetail(postId) {
+            const post = posts.find(p => p.id === postId);
+            if(!post) return;
+
+            document.getElementById('header-title').innerText = "게시글 상세";
+
+            let commentsHtml = '';
+            post.comments.forEach(c => {
+                commentsHtml += `
+                    <div class="bg-gray-50 p-3 rounded-xl mb-2 text-xs border border-gray-100">
+                        <span class="font-bold text-emerald-700 block mb-0.5">${c.author}</span>
+                        <p class="text-gray-700">${c.text}</p>
+                    </div>
+                `;
+            });
+
+            let actionButtons = '';
+            if(post.author === currentUser.nickname) {
+                actionButtons = `
+                    <div class="flex space-x-2 mt-4">
+                        <button onclick="toggleStatus(${post.id})" class="flex-1 bg-gray-200 text-gray-700 font-bold py-2.5 rounded-xl text-xs shadow-sm">${post.status === '진행중' ? '✔ 해결 완료로 변경' : '🔄 진행중으로 변경'}</button>
+                        <button onclick="deletePost(${post.id})" class="bg-red-50 text-red-600 px-4 font-bold py-2.5 rounded-xl text-xs">삭제</button>
+                    </div>
+                `;
+            } else {
+                actionButtons = `
+                    <button onclick="startChatWithAuthor('${post.author}', ${post.id}, '${post.title}')" class="w-full mt-4 bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md flex items-center justify-center space-x-2 text-sm hover:bg-emerald-700 transition">
+                        <i class="fa-solid fa-comment-dots"></i>
+                        <span>작성자와 1:1 채팅하기 (답장)</span>
+                    </button>
+                `;
+            }
+
+            let html = `
+                <div class="p-4 space-y-4">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-bold text-emerald-600">${post.university} · ${post.author}</span>
+                            <span class="text-[11px] text-gray-400">조회수 ${post.views || 0}</span>
+                        </div>
+                        <h2 class="text-base font-bold text-gray-800 mb-2">${post.title}</h2>
+                        <p class="text-gray-700 text-xs mb-4 leading-relaxed whitespace-pre-line">${post.content}</p>
+                        
+                        <div class="bg-emerald-50 p-3 rounded-xl text-xs space-y-1 text-emerald-900 mb-4 border border-emerald-100">
+                            <p><i class="fa-solid fa-location-dot mr-1.5 text-emerald-600"></i><strong>교내 장소:</strong> ${post.place}</p>
+                            <p><i class="fa-regular fa-clock mr-1.5 text-emerald-600"></i><strong>시간 협의:</strong> ${post.datetime}</p>
+                        </div>
+
+                        <!-- 링크 공유 버튼 (트래킹 연동) -->
+                        <button onclick="copyShareLink(${post.id})" class="w-full mb-2 bg-blue-50 text-blue-600 border border-blue-200 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center space-x-1 hover:bg-blue-100 transition">
+                            <i class="fa-solid fa-link"></i>
+                            <span>이 게시글 링크 복사하기 (공유 기록 남기기)</span>
+                        </button>
+                        
+                        ${actionButtons}
+                    </div>
+
+                    <!-- 댓글 및 소통 -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 class="font-bold text-xs text-gray-800 mb-3"><i class="fa-regular fa-comments mr-1.5 text-emerald-600"></i>댓글 및 답장</h3>
+                        <div class="mb-3 space-y-1">${commentsHtml || '<p class="text-xs text-gray-400 py-4 text-center">작성된 댓글이 없습니다.</p>'}</div>
+                        <div class="flex space-x-2">
+                            <input type="text" id="comment-input" placeholder="댓글을 남겨보세요..." class="flex-1 p-2.5 border border-gray-300 rounded-xl text-xs bg-white">
+                            <button onclick="addComment(${post.id})" class="bg-emerald-600 text-white px-4 rounded-xl text-xs font-bold shadow">등록</button>
+                        </div>
+                    </div>
+                    
+                    <button onclick="switchTab('home')" class="w-full text-center text-xs text-gray-500 py-2"><i class="fa-solid fa-arrow-left mr-1"></i>목록으로 돌아가기</button>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        // 링크 복사 및 유입 기록(트래킹) 시뮬레이션
+        function copyShareLink(postId) {
+            const shareUrl = window.location.origin + window.location.pathname + `?postId=${postId}&ref=shared_link`;
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                alert(`게시글 링크가 클립보드에 복사되었습니다!\n\n[링크 주소]\n${shareUrl}\n\n※ 이 링크를 통해 다른 사용자가 접속하면 방문 기록과 유입 통계에 자동으로 남습니다.`);
+            });
+        }
+
+        function addComment(postId) {
+            const input = document.getElementById('comment-input');
+            if(!input.value.trim()) return;
+
+            const post = posts.find(p => p.id === postId);
+            post.comments.push({ author: currentUser.nickname, text: input.value.trim() });
+            saveData();
+            openDetail(postId);
+        }
+
+        function toggleStatus(postId) {
+            const post = posts.find(p => p.id === postId);
+            post.status = post.status === '진행중' ? '해결완료' : '진행중';
+            saveData();
+            openDetail(postId);
+        }
+
+        function deletePost(postId) {
+            if(confirm('정말 이 게시글을 삭제하시겠습니까?')) {
+                posts = posts.filter(p => p.id !== postId);
+                saveData();
+                switchTab('home');
+            }
+        }
+
+        // 5. 1:1 실시간 채팅 기능
+        function startChatWithAuthor(partnerName, postId, postTitle) {
+            let existingChat = chats.find(c => c.postId === postId && c.partner === partnerName);
+            if(!existingChat) {
+                existingChat = {
+                    id: Date.now(),
+                    postId,
+                    postTitle,
+                    partner: partnerName,
+                    lastMessage: '대화가 시작되었습니다.',
+                    messages: [
+                        { sender: partnerName, text: `안녕하세요! "${postTitle}" 게시글 보고 대여/나눔 문의드립니다.`, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
+                    ]
+                };
+                chats.unshift(existingChat);
+                saveData();
+            }
+            openChatRoom(existingChat.id);
+        }
+
+        function renderChatList() {
+            document.getElementById('header-title').innerText = "1:1 채팅 목록";
+            let html = `<div class="p-4 space-y-3">`;
+
+            if(chats.length === 0) {
+                html += `<div class="text-center py-20 text-gray-400"><i class="fa-regular fa-comment-dots text-4xl mb-2"></i><p class="text-xs">진행 중인 채팅이 없습니다.</p></div>`;
+            } else {
+                chats.forEach(chat => {
+                    html += `
+                        <div onclick="openChatRoom(${chat.id})" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:border-emerald-500 flex items-center space-x-3">
+                            <div class="w-11 h-11 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shadow-inner">
+                                ${chat.partner.slice(0, 1)}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex justify-between items-center mb-0.5">
+                                    <h4 class="font-bold text-xs text-gray-800">${chat.partner}</h4>
+                                    <span class="text-[10px] text-gray-400 truncate max-w-[120px]">${chat.postTitle}</span>
+                                </div>
+                                <p class="text-xs text-gray-500 truncate">${chat.lastMessage}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            html += `</div>`;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        function openChatRoom(chatId) {
+            const chat = chats.find(c => c.id === chatId);
+            document.getElementById('header-title').innerText = `${chat.partner}님과 대화방`;
+
+            let msgHtml = '';
+            chat.messages.forEach(m => {
+                const isMe = m.sender === currentUser.nickname;
+                msgHtml += `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-3">
+                        <span class="text-[9px] text-gray-400 mb-0.5 px-1">${m.sender}</span>
+                        <div class="max-w-[75%] p-3 rounded-2xl text-xs ${isMe ? 'bg-emerald-600 text-white rounded-br-none shadow-sm' : 'bg-white text-gray-800 rounded-bl-none border border-gray-200 shadow-sm'}">
+                            ${m.text}
+                        </div>
+                        <span class="text-[8px] text-gray-400 mt-0.5 px-1">${m.time}</span>
+                    </div>
+                `;
+            });
+
+            let html = `
+                <div class="flex flex-col h-[calc(92vh-120px)] justify-between bg-gray-50">
+                    <div class="p-2.5 bg-emerald-50 border-b border-emerald-100 text-[11px] text-emerald-900 flex justify-between items-center px-4">
+                        <span><i class="fa-solid fa-shield-halved mr-1 text-emerald-600"></i>교내 안심 거래 채팅방</span>
+                        <button onclick="switchTab('chat')" class="font-bold text-emerald-700">목록으로</button>
+                    </div>
+                    <div id="chat-scroll" class="flex-1 p-4 overflow-y-auto space-y-1">
+                        ${msgHtml}
+                    </div>
+                    <div class="p-3 bg-white border-t border-gray-200 flex space-x-2">
+                        <input type="text" id="chat-input" placeholder="만날 장소와 시간을 협의해보세요..." class="flex-1 p-3 border border-gray-300 rounded-xl text-xs bg-white">
+                        <button onclick="sendMessage(${chat.id})" class="bg-emerald-600 text-white px-4 rounded-xl text-xs font-bold shadow"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+            const scroll = document.getElementById('chat-scroll');
+            scroll.scrollTop = scroll.scrollHeight;
+        }
+
+        function sendMessage(chatId) {
+            const input = document.getElementById('chat-input');
+            if(!input.value.trim()) return;
+
+            const chat = chats.find(c => c.id === chatId);
+            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            chat.messages.push({ sender: currentUser.nickname, text: input.value.trim(), time: timeStr });
+            chat.lastMessage = input.value.trim();
+            saveData();
+            openChatRoom(chatId);
+        }
+
+        // 6. 마이페이지 및 링크 유입 기록(로그) 확인
+        function renderMyPage() {
+            document.getElementById('header-title').innerText = "마이페이지";
+            const myPosts = posts.filter(p => p.author === currentUser.nickname);
+
+            let logsHtml = '';
+            if(linkLogs.length === 0) {
+                logsHtml = `<p class="text-xs text-gray-400 py-3 text-center">아직 링크를 통해 유입된 기록이 없습니다.</p>`;
+            } else {
+                linkLogs.forEach(log => {
+                    logsHtml += `
+                        <div class="p-2.5 bg-gray-50 rounded-xl mb-2 text-xs border border-gray-100 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold text-blue-600 block">[공유 유입] ${log.postTitle}</span>
+                                <span class="text-[10px] text-gray-400">${log.time}</span>
+                            </div>
+                            <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">방문기록 남음</span>
+                        </div>
+                    `;
+                });
+            }
+
+            let html = `
+                <div class="p-4 space-y-4">
+                    <div class="bg-emerald-600 text-white p-5 rounded-2xl shadow-md flex items-center space-x-4">
+                        <div class="w-14 h-14 bg-white text-emerald-700 rounded-2xl flex items-center justify-center font-bold text-xl shadow">
+                            ${currentUser.nickname.slice(0, 1)}
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-base">${currentUser.nickname}</h3>
+                            <p class="text-xs text-emerald-100 mt-0.5"><i class="fa-solid fa-school mr-1"></i>${currentUser.university}</p>
+                        </div>
+                    </div>
+
+                    <!-- 링크 공유 유입 기록 카드 -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <h4 class="font-bold text-xs text-gray-800 mb-2"><i class="fa-solid fa-link mr-1.5 text-blue-500"></i>링크 유입 및 공유 기록 트래킹</h4>
+                        <p class="text-[11px] text-gray-500 mb-3">다른 친구가 공유받은 링크를 타고 들어올 때마다 남는 기록입니다.</p>
+                        <div class="max-h-40 overflow-y-auto space-y-1">${logsHtml}</div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <h4 class="font-bold text-xs text-gray-800 mb-3"><i class="fa-solid fa-pen-to-square mr-1.5 text-emerald-600"></i>내가 작성한 게시글 (${myPosts.length}개)</h4>
+                        <div class="space-y-2 max-h-48 overflow-y-auto">
+            `;
+
+            if(myPosts.length === 0) {
+                html += `<p class="text-xs text-gray-400 py-4 text-center">작성한 게시글이 없습니다.</p>`;
+            } else {
+                myPosts.forEach(p => {
+                    html += `
+                        <div onclick="openDetail(${p.id})" class="p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 flex justify-between items-center border border-gray-100">
+                            <div>
+                                <span class="text-[10px] text-emerald-600 font-bold">${p.category==='request'?'필요요청':p.category==='rent'?'물품대여':'무료나눔'}</span>
+                                <h5 class="text-xs font-bold text-gray-800 mt-0.5">${p.title}</h5>
+                            </div>
+                            <span class="text-[10px] bg-white border border-gray-200 px-2 py-1 rounded text-gray-600 font-medium">${p.status}</span>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 text-xs space-y-3 text-gray-700 font-medium">
+                        <div onclick="logout()" class="flex justify-between py-1 text-red-500 font-bold cursor-pointer"><span>계정 로그아웃 및 초기화</span><i class="fa-solid fa-arrow-right-from-bracket"></i></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+        }
+
+        function logout() {
+            if(confirm('로그아웃 하시겠습니까?')) {
+                localStorage.removeItem('nanumi_user');
+                currentUser = null;
+                renderAuthScreen();
+            }
+        }
+    </script>
+</body>
+</html>
